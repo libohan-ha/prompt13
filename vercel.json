@@ -5,12 +5,5 @@
       "src": "next.config.mjs",
       "use": "@vercel/next"
     }
-  ],
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@NEXT_PUBLIC_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    "GPT4O_API_KEY": "@gpt4o_api_key",
-    "DEEPSEEK_API_KEY": "@deepseek_api_key",
-    "NEXT_PUBLIC_GEMINI_API_KEY": "@next_public_gemini_api_key"
-  }
+  ]
 } 
