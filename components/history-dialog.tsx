@@ -1,216 +1,221 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "@/components/ui/use-toast"
-import { getClientId, setLocalStorage } from "@/lib/utils"
-import { Search, Trash2 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { getClientId } from "@/lib/utils"
+import { Loader2, Search, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
-
-type HistoryRecord = {
-  id: string
-  original_prompt: string
-  optimized_prompt: string
-  model: string
-  created_at: string
-}
 
 interface HistoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSelect?: (prompt: { original_prompt: string; optimized_prompt: string; model: string }) => void
 }
 
-export function HistoryDialog({ open, onOpenChange }: HistoryDialogProps) {
-  const router = useRouter()
-  const [records, setRecords] = useState<HistoryRecord[]>([])
+export function HistoryDialog({
+  open,
+  onOpenChange,
+  onSelect
+}: HistoryDialogProps) {
+  const [prompts, setPrompts] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
-      loadHistory()
+      loadPrompts()
+    } else {
+      setSearchTerm("")
     }
   }, [open])
 
-  const loadHistory = async () => {
+  const loadPrompts = async () => {
     try {
+      setLoading(true)
       const clientId = getClientId()
+      console.log('Loading prompts with client_id:', clientId)
+      
+      if (!clientId) {
+        throw new Error('No client ID available')
+      }
+
       const response = await fetch('/api/prompts', {
         headers: {
-          'x-client-id': clientId || ''
+          'x-client-id': clientId
         }
       })
-      if (!response.ok) throw new Error('Failed to load history')
+      
+      console.log('API Response status:', response.status)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('API Error:', errorData)
+        throw new Error(
+          errorData.error || 
+          'Failed to fetch prompts'
+        )
+      }
+      
       const data = await response.json()
-      
-      // 使用Map进行去重，以ID为键
-      const uniqueRecords = new Map()
-      data.forEach((record: HistoryRecord) => {
-        if (!uniqueRecords.has(record.id)) {
-          uniqueRecords.set(record.id, record)
-        }
-      })
-      
-      // 转换回数组并按创建时间排序
-      const deduplicatedRecords = Array.from(uniqueRecords.values())
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      
-      setRecords(deduplicatedRecords)
+      console.log('Loaded prompts:', data)
+      setPrompts(data)
     } catch (error) {
-      console.error('Error loading history:', error)
+      console.error('Error loading prompts:', error)
+      toast({
+        variant: "destructive",
+        title: "加载失败",
+        description: error instanceof Error 
+          ? `错误: ${error.message}` 
+          : "未知错误，请检查网络连接"
+      })
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
-  }
-
-  const handleSelect = (record: HistoryRecord) => {
-    setLocalStorage('optimizedPrompt', JSON.stringify({
-      originalPrompt: record.original_prompt,
-      optimizedPrompt: record.optimized_prompt,
-      model: record.model
-    }))
-    onOpenChange(false)
-    router.push('/optimize')
   }
 
   const handleDelete = async (id: string) => {
     try {
-      setIsDeleting(true)
-      const clientId = getClientId()
+      setDeleting(id)
       const response = await fetch(`/api/prompts?id=${id}`, {
         method: 'DELETE',
         headers: {
-          'x-client-id': clientId || ''
+          'x-client-id': getClientId() || ''
         }
       })
-
+      
       if (!response.ok) {
-        throw new Error('Failed to delete record')
+        throw new Error('Failed to delete prompt')
       }
-
+      
+      await loadPrompts()
+      
       toast({
         title: "删除成功",
-        description: "记录已被删除"
+        description: "已删除该记录"
       })
-
-      // 重新加载记录
-      loadHistory()
     } catch (error) {
-      console.error('Delete error:', error)
+      console.error('Error deleting prompt:', error)
       toast({
         variant: "destructive",
         title: "删除失败",
-        description: "无法删除记录"
+        description: error instanceof Error ? error.message : "未知错误"
       })
     } finally {
-      setIsDeleting(false)
-      setDeleteId(null)
+      setDeleting(null)
     }
   }
 
-  const filteredRecords = records.filter(record => 
-    record.original_prompt.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleSelectPrompt = (prompt: any) => {
+    console.log('handleSelectPrompt called with:', prompt)
+    if (onSelect) {
+      if (!prompt.original_prompt || !prompt.optimized_prompt || !prompt.model) {
+        console.error('Missing required fields in prompt:', prompt)
+        toast({
+          variant: "destructive",
+          title: "错误",
+          description: "记录数据不完整"
+        })
+        return
+      }
+
+      onSelect({
+        original_prompt: prompt.original_prompt,
+        optimized_prompt: prompt.optimized_prompt,
+        model: prompt.model
+      })
+      console.log('Called onSelect with data')
+      onOpenChange(false)
+    } else {
+      console.warn('onSelect callback is not provided')
+    }
+  }
+
+  const filteredPrompts = prompts.filter(prompt => 
+    prompt.original_prompt.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>历史记录</DialogTitle>
-          </DialogHeader>
-          
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <Input
-              className="pl-10"
-              placeholder="搜索历史记录..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>历史记录</DialogTitle>
+        </DialogHeader>
+        
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
+          <Input
+            placeholder="搜索历史记录..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
 
-          <ScrollArea className="h-[400px] pr-4">
-            {isLoading ? (
-              <div className="text-center py-4">加载中...</div>
-            ) : filteredRecords.length === 0 ? (
-              <div className="text-center py-4 text-gray-500">
-                {searchTerm ? "没有找到匹配的记录" : "暂无历史记录"}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredRecords.map((record) => (
-                  <div
-                    key={record.id}
-                    className="p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 transition-all relative group"
-                  >
-                    <div 
-                      className="cursor-pointer"
-                      onClick={() => handleSelect(record)}
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="font-medium truncate flex-1">
-                          {record.original_prompt}
-                        </div>
-                        <div className="text-sm text-gray-500 ml-2">
-                          {new Date(record.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        模型: {record.model}
-                      </div>
+        <ScrollArea className="flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+            </div>
+          ) : filteredPrompts.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              暂无历史记录
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredPrompts.map((prompt) => (
+                <div
+                  key={prompt.id}
+                  className="border rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    console.log('Item clicked, prompt:', prompt)
+                    handleSelectPrompt(prompt)
+                  }}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="text-sm text-gray-500">
+                      {new Date(prompt.created_at).toLocaleString()}
                     </div>
-                    <button
-                      className="absolute right-2 top-2 p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setDeleteId(record.id)
-                      }}
-                      disabled={isDeleting}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(prompt.id)
+                        }}
+                        disabled={deleting === prompt.id}
+                      >
+                        {deleting === prompt.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认删除</AlertDialogTitle>
-            <AlertDialogDescription>
-              这将永久删除该记录。此操作无法撤消。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteId && handleDelete(deleteId)}
-              className="bg-red-500 hover:bg-red-600"
-            >
-              {isDeleting ? "删除中..." : "删除"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+                  <div className="text-sm text-gray-700 mb-2 whitespace-pre-wrap line-clamp-3">
+                    {prompt.original_prompt}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    模型：{prompt.model}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   )
 } 

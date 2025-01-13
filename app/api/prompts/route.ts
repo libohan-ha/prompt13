@@ -1,119 +1,72 @@
-import { supabase, testConnection } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
-import type { Prompt, Version } from '@/types/api'
-import { getClientId } from '@/lib/utils'
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const clientId = body.client_id || req.headers.get('x-client-id')
+    const { original_prompt, optimized_prompt, model, client_id } = await req.json()
     
-    console.log('Received request:', { 
-      body,
-      clientId,
-      headers: Object.fromEntries(req.headers.entries())
-    })
-
-    if (!clientId) {
+    if (!original_prompt || !optimized_prompt || !model || !client_id) {
       return NextResponse.json(
-        { error: 'Missing client ID' },
+        { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // 测试数据库连接
-    const isConnected = await testConnection()
-    if (!isConnected) {
-      return NextResponse.json(
-        { error: 'Database connection failed' },
-        { status: 500 }
-      )
-    }
-
-    const { original_prompt, optimized_prompt, model } = body
-
-    // 插入prompt记录
-    console.log('Inserting into database:', {
-      original_prompt,
-      optimized_prompt,
-      model,
-      client_id: clientId
-    })
-
-    const { data: prompt, error: promptError } = await supabase
+    // 检查是否已存在相同的记录
+    const { data: existingData } = await supabase
       .from('prompts')
-      .insert({
-        original_prompt,
-        optimized_prompt,
-        model,
-        client_id: clientId
-      })
       .select()
+      .eq('original_prompt', original_prompt)
+      .eq('client_id', client_id)
       .single()
 
-    if (promptError) {
-      console.error('Database error:', promptError)
-      return NextResponse.json(
-        { 
-          error: 'Failed to save prompt',
-          details: promptError,
-          message: promptError.message,
-          code: promptError.code
-        },
-        { status: 500 }
-      )
-    }
+    if (existingData) {
+      // 如果存在，更新记录
+      const { error: updateError } = await supabase
+        .from('prompts')
+        .update({
+          optimized_prompt,
+          model,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingData.id)
 
-    console.log('Successfully inserted prompt:', prompt)
-    return NextResponse.json(prompt)
-  } catch (error) {
-    console.error('API Error:', error)
-    return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        details: error,
-        message: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
-  }
-}
-
-export async function GET(req: NextRequest) {
-  try {
-    const clientId = req.headers.get('x-client-id')
-    
-    console.log('Fetching prompts from database...')
-    
-    const { data, error } = await supabase
-      .from('prompts')
-      .select(`
-        *,
-        versions (
-          id,
-          content,
-          version_number,
-          feedback,
-          created_at
+      if (updateError) {
+        console.error('Error updating record:', updateError)
+        return NextResponse.json(
+          { error: 'Failed to update record' },
+          { status: 500 }
         )
-      `)
-      .eq('client_id', clientId) // 只查询当前客户端的记录
-      .order('created_at', { ascending: false })
+      }
 
-    if (error) {
-      console.error('Database error:', error)
+      return NextResponse.json({ message: 'Record updated successfully' })
+    }
+
+    // 如果不存在，创建新记录
+    const { error: insertError } = await supabase
+      .from('prompts')
+      .insert([
+        {
+          original_prompt,
+          optimized_prompt,
+          model,
+          client_id
+        }
+      ])
+
+    if (insertError) {
+      console.error('Error inserting record:', insertError)
       return NextResponse.json(
-        { error: 'Failed to fetch prompts', details: error },
+        { error: 'Failed to save record' },
         { status: 500 }
       )
     }
 
-    console.log('Successfully fetched prompts:', data)
-    return NextResponse.json(data)
+    return NextResponse.json({ message: 'Record saved successfully' })
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -123,35 +76,74 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
-    const clientId = req.headers.get('x-client-id')
+    const client_id = req.headers.get('x-client-id')
 
-    if (!id) {
+    if (!id || !client_id) {
       return NextResponse.json(
-        { error: 'Missing prompt ID' },
+        { error: 'Missing required parameters' },
         { status: 400 }
       )
     }
 
-    console.log('Deleting prompt:', { id, clientId })
-
+    // 删除记录
     const { error } = await supabase
       .from('prompts')
       .delete()
-      .match({ id, client_id: clientId })
+      .eq('id', id)
+      .eq('client_id', client_id)
 
     if (error) {
-      console.error('Delete error:', error)
+      console.error('Error deleting record:', error)
       return NextResponse.json(
-        { error: 'Failed to delete prompt', details: error },
+        { error: 'Failed to delete record' },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ message: 'Record deleted successfully' })
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error },
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const clientId = req.headers.get('x-client-id')
+    console.log('GET /api/prompts - Client ID:', clientId)
+    
+    if (!clientId) {
+      console.error('GET /api/prompts - Missing client ID')
+      return NextResponse.json(
+        { error: 'Client ID is required' },
+        { status: 400 }
+      )
+    }
+
+    console.log('GET /api/prompts - Fetching records for client:', clientId)
+    const { data, error } = await supabase
+      .from('prompts')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('GET /api/prompts - Database error:', error)
+      return NextResponse.json(
+        { error: `Database error: ${error.message}` },
+        { status: 500 }
+      )
+    }
+
+    console.log('GET /api/prompts - Successfully fetched records:', data?.length)
+    return NextResponse.json(data)
+  } catch (error) {
+    console.error('GET /api/prompts - Unexpected error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

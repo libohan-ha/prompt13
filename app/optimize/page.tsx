@@ -18,6 +18,7 @@ import { ArrowRightIcon, CopyIcon, Loader2, Play, PlusCircle, Zap } from 'lucide
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { DonateDialog } from "../../components/donate-dialog"
+import { HistoryDialog } from "../../components/history-dialog"
 
 export default function OptimizePage() {
   const router = useRouter()
@@ -39,6 +40,7 @@ export default function OptimizePage() {
   const [isDonateDialogOpen, setIsDonateDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const hasSavedRef = useRef(false)
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
 
   // 计算总页数
   const totalPages = Math.ceil(promptHistory.length / VERSIONS_PER_PAGE)
@@ -241,110 +243,26 @@ export default function OptimizePage() {
           })
         })
       } else if (selectedModel === "gemini-1206" || selectedModel === "gemini-2.0-flash-exp") {
-        const modelName = selectedModel === "gemini-1206" ? "gemini-exp-1206" : "gemini-2.0-flash-exp"
-        
-        response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [{ 
-                    text: `你是一个专业的AI提示词优化专家。请帮我优化以下prompt，并按照以下格式返回：
-
-# Role: [角色名称]
-
-## Profile
-- language: [语言]
-- description: [详细的角色描述]
-- background: [角色背景]
-- personality: [性格特征]
-- expertise: [专业领域]
-- target_audience: [目标用户群]
-
-## Skills
-
-1. [核心技能类别 1]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-
-2. [核心技能类别 2]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-
-3. [辅助技能类别]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-
-## Rules
-
-1. [基本原则]：
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-
-2. [行为准则]：
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-
-3. [限制条件]：
-   - [具体限制]: [详细说明]
-   - [具体限制]: [详细说明]
-   - [具体限制]: [详细说明]
-   - [具体限制]: [详细说明]
-
-## Workflows
-
-1. [主要工作流程 1]
-   - 目标: [明确目标]
-   - 步骤 1: [详细说明]
-   - 步骤 2: [详细说明]
-   - 步骤 3: [详细说明]
-   - 预期结果: [说明]
-
-2. [主要工作流程 2]
-   - 目标: [明确目标]
-   - 步骤 1: [详细说明]
-   - 步骤 2: [详细说明]
-   - 步骤 3: [详细说明]
-   - 预期结果: [说明]
-
-请基于以上模板，优化并扩展以下prompt，确保内容专业、完整且结构清晰：
-
-${originalPrompt}`
-                  }]
-                }
-              ],
-              generationConfig: selectedModel === "gemini-2.0-flash-exp" ? {
-                temperature: 0.9,
-                maxOutputTokens: 2048,
-              } : {
-                temperature: 1,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 8192,
-                responseMimeType: "text/plain"
+        response = await fetch("/api/gemini", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-client-id": getClientId() || ''
+          },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: "user",
+                content: originalPrompt
               }
-            })
-          }
-        )
+            ],
+            model: selectedModel
+          })
+        })
 
         if (!response.ok) {
           const error = await response.json()
+          console.error('Gemini API error:', error)
           throw new Error(error.error || '优化请求失败')
         }
 
@@ -843,6 +761,14 @@ Input: ${testInput}`
         const result = await response.json()
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
           const content = result.candidates[0].content.parts[0].text
+          
+          // 保存到数据库
+          try {
+            await saveToDatabase(editedContent, content, model)
+          } catch (error) {
+            console.error('Error saving to database:', error)
+          }
+
           setTestResult({
             input: testInput,
             output: content,
@@ -1427,6 +1353,13 @@ Input: ${feedback}`
       setIsSaving(true)
       const clientId = getClientId()
       
+      console.log('Saving to database:', {
+        original_prompt: originalPrompt,
+        optimized_prompt: optimizedPrompt,
+        model,
+        client_id: clientId
+      })
+
       const response = await fetch('/api/prompts', {
         method: 'POST',
         headers: {
@@ -1443,10 +1376,16 @@ Input: ${feedback}`
 
       if (!response.ok) {
         const errorData = await response.json()
+        console.error('Database save error:', errorData)
         throw new Error(errorData.error || 'Failed to save prompt')
       }
 
       const result = await response.json()
+      console.log('Successfully saved to database:', result)
+      
+      // 标记为已保存
+      hasSavedRef.current = true
+      
       return result
     } catch (error) {
       console.error('Error in saveToDatabase:', error)
@@ -1518,9 +1457,18 @@ Input: ${feedback}`
       <main className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto bg-white/90 rounded-2xl sm:rounded-[40px] shadow-2xl overflow-hidden backdrop-blur-lg">
           <div className="p-6 sm:p-8 lg:p-12 space-y-6 sm:space-y-8">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-              Prompt Optimizer
-            </h1>
+            <div className="flex justify-between items-center">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+                Prompt Optimizer
+              </h1>
+              <Button
+                variant="outline"
+                onClick={() => setIsHistoryDialogOpen(true)}
+                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                历史记录
+              </Button>
+            </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
               {/* Optimized Prompt */}
@@ -1727,6 +1675,49 @@ Input: ${feedback}`
       <DonateDialog 
         open={isDonateDialogOpen} 
         onOpenChange={setIsDonateDialogOpen}
+      />
+      <HistoryDialog
+        open={isHistoryDialogOpen}
+        onOpenChange={setIsHistoryDialogOpen}
+        onSelect={(prompt) => {
+          console.log('Handling prompt selection:', prompt)
+          
+          // 检查数据完整性
+          if (!prompt.original_prompt || !prompt.optimized_prompt || !prompt.model) {
+            console.error('Incomplete prompt data:', prompt)
+            toast({
+              variant: "destructive",
+              title: "错误",
+              description: "记录数据不完整"
+            })
+            return
+          }
+
+          // 把原始提示词放到待处理内容框中
+          setTestInput(prompt.original_prompt)
+          console.log('Set test input:', prompt.original_prompt)
+          
+          // 把优化后的提示词放到优化后Prompt框中
+          setStreamContent(prompt.optimized_prompt)
+          setEditedContent(prompt.optimized_prompt)
+          console.log('Set optimized prompt:', prompt.optimized_prompt)
+          
+          // 设置使用的模型
+          setModel(prompt.model)
+          console.log('Set model:', prompt.model)
+          
+          // 清空测试结果
+          setTestResult(null)
+          
+          // 关闭对话框
+          setIsHistoryDialogOpen(false)
+          
+          // 提示用户
+          toast({
+            title: "已加载",
+            description: "历史记录已加载到编辑器"
+          })
+        }}
       />
     </>
   )
