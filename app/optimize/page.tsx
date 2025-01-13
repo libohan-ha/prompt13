@@ -12,7 +12,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { GEMINI_API_KEY } from "@/lib/api"
-import { getClientId, getLocalStorage } from '@/lib/utils'
+import { getLocalStorage } from '@/lib/utils'
 import type { OptimizedPrompt, TestResult } from '@/types/prompt'
 import { ArrowRightIcon, CopyIcon, Loader2, Play, PlusCircle, Zap } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -246,8 +246,7 @@ export default function OptimizePage() {
         response = await fetch("/api/gemini", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "x-client-id": getClientId() || ''
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({
             messages: [
@@ -271,18 +270,47 @@ export default function OptimizePage() {
           const content = result.candidates[0].content.parts[0].text
           setStreamContent(content)
           
-          // 更新本地状态
-          const optimizedPrompt = {
-            content: content,
-            originalPrompt: originalPrompt,
-            version: promptHistory.length + 1
+          try {
+            // 保存到数据库
+            const saveResponse = await fetch('/api/prompts', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                original_prompt: originalPrompt,
+                optimized_prompt: content,
+                model: selectedModel
+              })
+            })
+
+            if (!saveResponse.ok) {
+              const saveError = await saveResponse.json()
+              console.error('Save error:', saveError)
+              throw new Error(saveError.error || '保存记录失败')
+            }
+
+            // 更新本地状态
+            const optimizedPrompt = {
+              content: content,
+              originalPrompt: originalPrompt,
+              model: selectedModel,
+              version: promptHistory.length + 1
+            }
+            
+            const newHistory = [...promptHistory, optimizedPrompt]
+            setPromptHistory(newHistory)
+            setCurrentVersion(newHistory.length)
+            localStorage.setItem('optimizedPromptHistory', JSON.stringify(newHistory))
+            localStorage.setItem('optimizedPrompt', JSON.stringify(optimizedPrompt))
+          } catch (saveError) {
+            console.error('Error saving prompt:', saveError)
+            toast({
+              variant: "destructive",
+              title: "保存失败",
+              description: saveError instanceof Error ? saveError.message : "保存记录时发生错误"
+            })
           }
-          
-          const newHistory = [...promptHistory, optimizedPrompt]
-          setPromptHistory(newHistory)
-          setCurrentVersion(newHistory.length)
-          localStorage.setItem('optimizedPromptHistory', JSON.stringify(newHistory))
-          localStorage.setItem('optimizedPrompt', JSON.stringify(optimizedPrompt))
         }
         
         return; // 提前返回，不执行后续的流处理逻辑
@@ -762,13 +790,7 @@ Input: ${testInput}`
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
           const content = result.candidates[0].content.parts[0].text
           
-          // 保存到数据库
-          try {
-            await saveToDatabase(editedContent, content, model)
-          } catch (error) {
-            console.error('Error saving to database:', error)
-          }
-
+          // 删除保存到数据库的代码
           setTestResult({
             input: testInput,
             output: content,
@@ -1347,30 +1369,26 @@ Input: ${feedback}`
   }
 
   const saveToDatabase = async (originalPrompt: string, optimizedPrompt: string, model: string) => {
-    if (isSaving || hasSavedRef.current) return // 检查是否已保存
+    if (isSaving || hasSavedRef.current) return
     
     try {
       setIsSaving(true)
-      const clientId = getClientId()
       
       console.log('Saving to database:', {
         original_prompt: originalPrompt,
         optimized_prompt: optimizedPrompt,
-        model,
-        client_id: clientId
+        model
       })
 
       const response = await fetch('/api/prompts', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-client-id': clientId || ''
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           original_prompt: originalPrompt,
           optimized_prompt: optimizedPrompt,
-          model,
-          client_id: clientId
+          model
         })
       })
 
@@ -1383,7 +1401,6 @@ Input: ${feedback}`
       const result = await response.json()
       console.log('Successfully saved to database:', result)
       
-      // 标记为已保存
       hasSavedRef.current = true
       
       return result
@@ -1391,7 +1408,7 @@ Input: ${feedback}`
       console.error('Error in saveToDatabase:', error)
       toast({
         variant: "destructive",
-        title: "保存失败",
+        title: "保存失败", 
         description: error instanceof Error ? error.message : "无法保存到数据库"
       })
       throw error
@@ -1722,12 +1739,8 @@ Input: ${feedback}`
             })
             return
           }
-
-          // 把原始提示词放到待处理内容框中
-          setTestInput(prompt.original_prompt)
-          console.log('Set test input:', prompt.original_prompt)
           
-          // 把优化后的提示词放到优化后Prompt框中
+          // 只设置优化后的提示词和模型
           setStreamContent(prompt.optimized_prompt)
           setEditedContent(prompt.optimized_prompt)
           console.log('Set optimized prompt:', prompt.optimized_prompt)
