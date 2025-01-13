@@ -45,38 +45,49 @@ export async function POST(req: NextRequest) {
 
     console.log('Login successful for user:', user.id)
 
-    // 生成JWT token
-    const secret = new TextEncoder().encode(JWT_SECRET)
-    const token = await new SignJWT({ userId: user.id, email: user.email })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('7d')
-      .sign(secret)
+    try {
+      // 生成JWT token
+      const secret = new TextEncoder().encode(JWT_SECRET)
+      const token = await new SignJWT({ userId: user.id, email: user.email })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime('7d')
+        .sign(secret)
 
-    // 创建响应
-    const response = NextResponse.json({
-      message: '登录成功',
-      user: {
-        id: user.id,
-        email: user.email
-      }
-    })
+      console.log('JWT token generated successfully')
 
-    // 设置cookie
-    response.cookies.set({
-      name: 'token',
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 // 7 days
-    })
+      // 创建响应
+      const response = NextResponse.json({
+        message: '登录成功',
+        user: {
+          id: user.id,
+          email: user.email
+        }
+      })
 
-    console.log('Cookie set successfully')
-    return response
+      // 设置cookie
+      response.cookies.set({
+        name: 'token',
+        value: token,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 // 7 days
+      })
+
+      console.log('Cookie set successfully')
+      return response
+
+    } catch (tokenError) {
+      console.error('Error generating token:', tokenError)
+      return NextResponse.json(
+        { error: '登录失败：无法生成令牌' },
+        { status: 500 }
+      )
+    }
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(
-      { error: '登录失败' },
+      { error: '登录失败：服务器错误' },
       { status: 500 }
     )
   }

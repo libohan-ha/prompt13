@@ -27,7 +27,13 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password })
       })
       
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError)
+        throw new Error('登录失败：服务器响应无效')
+      }
       
       if (!response.ok) {
         throw new Error(data.error || '登录失败')
@@ -39,7 +45,7 @@ export default function LoginPage() {
       })
       
       // 添加一个短暂的延迟，确保cookie已经设置
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
       // 使用window.location进行强制跳转到主页
       window.location.href = '/'
