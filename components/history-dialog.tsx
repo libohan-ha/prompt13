@@ -17,7 +17,7 @@ import { useEffect, useState } from "react"
 interface HistoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSelect?: (prompt: { original_prompt: string; optimized_prompt: string; model: string }) => void
+  onSelect: (prompt: any) => void
 }
 
 export function HistoryDialog({
@@ -41,16 +41,11 @@ export function HistoryDialog({
   const loadPrompts = async () => {
     try {
       setLoading(true)
-      const clientId = getClientId()
-      console.log('Loading prompts with client_id:', clientId)
+      console.log('Loading prompts...')
       
-      if (!clientId) {
-        throw new Error('No client ID available')
-      }
-
       const response = await fetch('/api/prompts', {
         headers: {
-          'x-client-id': clientId
+          'Content-Type': 'application/json'
         }
       })
       
@@ -116,26 +111,20 @@ export function HistoryDialog({
 
   const handleSelectPrompt = (prompt: any) => {
     console.log('handleSelectPrompt called with:', prompt)
-    if (onSelect) {
-      if (!prompt.original_prompt || !prompt.optimized_prompt || !prompt.model) {
-        console.error('Missing required fields in prompt:', prompt)
-        toast({
-          variant: "destructive",
-          title: "错误",
-          description: "记录数据不完整"
-        })
-        return
-      }
-
-      onSelect({
-        original_prompt: prompt.original_prompt,
-        optimized_prompt: prompt.optimized_prompt,
-        model: prompt.model
-      })
-      console.log('Called onSelect with data')
-      onOpenChange(false)
-    } else {
-      console.warn('onSelect callback is not provided')
+    if (!prompt) {
+      console.error('No prompt data received')
+      return
+    }
+    
+    if (typeof onSelect !== 'function') {
+      console.error('onSelect is not a function:', onSelect)
+      return
+    }
+    
+    try {
+      onSelect(prompt)
+    } catch (error) {
+      console.error('Error in onSelect:', error)
     }
   }
 

@@ -1452,6 +1452,27 @@ Input: ${feedback}`
     }
   }
 
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST'
+      })
+      
+      if (!response.ok) {
+        throw new Error('登出失败')
+      }
+      
+      router.push('/login')
+    } catch (error) {
+      console.error('Logout error:', error)
+      toast({
+        variant: "destructive",
+        title: "登出失败",
+        description: error instanceof Error ? error.message : "未知错误"
+      })
+    }
+  }
+
   return (
     <>
       <main className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 p-4 sm:p-6 lg:p-8">
@@ -1461,13 +1482,22 @@ Input: ${feedback}`
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
                 Prompt Optimizer
               </h1>
-              <Button
-                variant="outline"
-                onClick={() => setIsHistoryDialogOpen(true)}
-                className="text-blue-600 border-blue-200 hover:bg-blue-50"
-              >
-                历史记录
-              </Button>
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsHistoryDialogOpen(true)}
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                >
+                  历史记录
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleLogout}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  退出登录
+                </Button>
+              </div>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
@@ -1585,6 +1615,20 @@ Input: ${feedback}`
                   />
                 </div>
                 <div className="mt-4 flex items-center gap-4">
+                  <Select value={model} onValueChange={setModel}>
+                    <SelectTrigger className="w-[200px] h-12 sm:h-16 text-base sm:text-lg bg-white border-orange-200 text-orange-600 rounded-xl sm:rounded-2xl">
+                      <Zap className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="deepseek-v3">DeepSeek V3</SelectItem>
+                      <SelectItem value="gemini-1206">Gemini 1206</SelectItem>
+                      <SelectItem value="gemini-2.0-flash-exp">Gemini 2.0 Flash</SelectItem>
+                      <SelectItem value="gpt4o">GPT-4o</SelectItem>
+                      <SelectItem value="claude">Claude 3.5</SelectItem>
+                      <SelectItem value="grok">Grok</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button 
                     variant="outline"
                     className="flex-1 h-12 sm:h-16 px-6 sm:px-8 text-base sm:text-lg rounded-xl sm:rounded-2xl bg-white hover:bg-blue-50 text-blue-600 border-blue-200 hover:border-blue-400 flex items-center justify-center space-x-3 transition-all duration-300 ease-in-out transform hover:scale-105"
@@ -1603,20 +1647,6 @@ Input: ${feedback}`
                       </>
                     )}
                   </Button>
-                  <Select value={model} onValueChange={setModel}>
-                    <SelectTrigger className="w-[200px] h-12 sm:h-16 text-base sm:text-lg bg-white border-orange-200 text-orange-600 rounded-xl sm:rounded-2xl">
-                      <Zap className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="deepseek-v3">DeepSeek V3</SelectItem>
-                      <SelectItem value="gemini-1206">Gemini 1206</SelectItem>
-                      <SelectItem value="gemini-2.0-flash-exp">Gemini 2.0 Flash</SelectItem>
-                      <SelectItem value="gpt4o">GPT-4o</SelectItem>
-                      <SelectItem value="claude">Claude 3.5</SelectItem>
-                      <SelectItem value="grok">Grok</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
 
@@ -1680,7 +1710,7 @@ Input: ${feedback}`
         open={isHistoryDialogOpen}
         onOpenChange={setIsHistoryDialogOpen}
         onSelect={(prompt) => {
-          console.log('Handling prompt selection:', prompt)
+          console.log('Handling prompt selection in main page:', prompt)
           
           // 检查数据完整性
           if (!prompt.original_prompt || !prompt.optimized_prompt || !prompt.model) {
@@ -1711,12 +1741,6 @@ Input: ${feedback}`
           
           // 关闭对话框
           setIsHistoryDialogOpen(false)
-          
-          // 提示用户
-          toast({
-            title: "已加载",
-            description: "历史记录已加载到编辑器"
-          })
         }}
       />
     </>

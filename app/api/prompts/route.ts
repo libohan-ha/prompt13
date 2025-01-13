@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
-    const { original_prompt, optimized_prompt, model, client_id } = await req.json()
+    const { original_prompt, optimized_prompt, model } = await req.json()
+    const userId = req.headers.get('x-user-id')
     
-    if (!original_prompt || !optimized_prompt || !model || !client_id) {
+    if (!original_prompt || !optimized_prompt || !model || !userId) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
       .from('prompts')
       .select()
       .eq('original_prompt', original_prompt)
-      .eq('client_id', client_id)
+      .eq('user_id', userId)
       .single()
 
     if (existingData) {
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
           original_prompt,
           optimized_prompt,
           model,
-          client_id
+          user_id: userId
         }
       ])
 
@@ -76,9 +77,9 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
-    const client_id = req.headers.get('x-client-id')
+    const userId = req.headers.get('x-user-id')
 
-    if (!id || !client_id) {
+    if (!id || !userId) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
@@ -90,7 +91,7 @@ export async function DELETE(req: NextRequest) {
       .from('prompts')
       .delete()
       .eq('id', id)
-      .eq('client_id', client_id)
+      .eq('user_id', userId)
 
     if (error) {
       console.error('Error deleting record:', error)
@@ -110,40 +111,40 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const clientId = req.headers.get('x-client-id')
-    console.log('GET /api/prompts - Client ID:', clientId)
-    
-    if (!clientId) {
-      console.error('GET /api/prompts - Missing client ID')
+    const userId = request.headers.get('x-user-id')
+    console.log('GET /api/prompts - User ID:', userId)
+
+    if (!userId) {
+      console.error('No user ID in request headers')
       return NextResponse.json(
-        { error: 'Client ID is required' },
-        { status: 400 }
+        { error: 'User ID is required' },
+        { status: 401 }
       )
     }
 
-    console.log('GET /api/prompts - Fetching records for client:', clientId)
     const { data, error } = await supabase
       .from('prompts')
       .select('*')
-      .eq('client_id', clientId)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('GET /api/prompts - Database error:', error)
+      console.error('Database error:', error)
       return NextResponse.json(
-        { error: `Database error: ${error.message}` },
+        { error: 'Failed to fetch prompts' },
         { status: 500 }
       )
     }
 
-    console.log('GET /api/prompts - Successfully fetched records:', data?.length)
+    console.log('Successfully fetched prompts for user:', userId)
     return NextResponse.json(data)
+
   } catch (error) {
-    console.error('GET /api/prompts - Unexpected error:', error)
+    console.error('Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

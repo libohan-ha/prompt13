@@ -6,6 +6,7 @@ import { useState } from "react"
 
 // UI Components
 import { DonateDialog } from "@/components/donate-dialog"
+import { HistoryDialog } from "@/components/history-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -16,10 +17,9 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
-import { HistoryDialog } from "@/components/history-dialog"
 
 // Icons
-import { Zap, History } from 'lucide-react'
+import { History, Zap } from 'lucide-react'
 
 // Utils
 import { setLocalStorage } from "@/lib/utils"
@@ -33,6 +33,10 @@ export default function Home() {
   const [model, setModel] = React.useState<ModelType>("deepseek-v3")
   const [isDonateDialogOpen, setIsDonateDialogOpen] = React.useState(false)
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
+  const [testInput, setTestInput] = useState("")
+  const [streamContent, setStreamContent] = useState("")
+  const [editedContent, setEditedContent] = useState("")
+  const [testResult, setTestResult] = useState(null)
 
   const handleModelChange = (value: string) => {
     setModel(value as ModelType)
@@ -89,6 +93,14 @@ export default function Home() {
                 >
                   <span>捐赠</span>
                 </Button>
+                <Button
+                  className="h-12 sm:h-16 px-6 sm:px-8 text-base sm:text-lg rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white flex items-center justify-center space-x-3 transition-all duration-300 ease-in-out transform hover:scale-105"
+                  onClick={handleOptimize}
+                  disabled={!prompt.trim()}
+                >
+                  <span className="mr-2">开始优化</span>
+                  <span>→</span>
+                </Button>
                 <Select value={model} onValueChange={handleModelChange}>
                   <SelectTrigger className="w-[200px] h-12 sm:h-16 text-base sm:text-lg bg-white border-orange-200 text-orange-600 rounded-xl sm:rounded-2xl">
                     <Zap className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
@@ -103,14 +115,6 @@ export default function Home() {
                     <SelectItem value="grok">Grok</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button
-                  className="h-12 sm:h-16 px-6 sm:px-8 text-base sm:text-lg rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white flex items-center justify-center space-x-3 transition-all duration-300 ease-in-out transform hover:scale-105"
-                  onClick={handleOptimize}
-                  disabled={!prompt.trim()}
-                >
-                  <span className="mr-2">开始优化</span>
-                  <span>→</span>
-                </Button>
               </div>
             </div>
           </div>
@@ -120,9 +124,47 @@ export default function Home() {
         open={isDonateDialogOpen} 
         onOpenChange={setIsDonateDialogOpen}
       />
-      <HistoryDialog 
-        open={isHistoryDialogOpen} 
+      <HistoryDialog
+        open={isHistoryDialogOpen}
         onOpenChange={setIsHistoryDialogOpen}
+        onSelect={(prompt) => {
+          if (!prompt) {
+            console.error('No prompt data received')
+            return
+          }
+          
+          console.log('Selected prompt:', prompt)
+          
+          // 检查数据完整性
+          if (!prompt.original_prompt || !prompt.optimized_prompt || !prompt.model) {
+            console.error('Incomplete prompt data:', prompt)
+            toast({
+              variant: "destructive",
+              title: "错误",
+              description: "记录数据不完整"
+            })
+            return
+          }
+
+          // 保存数据到 localStorage
+          setLocalStorage('optimizedPrompt', JSON.stringify({
+            originalPrompt: prompt.original_prompt,
+            content: prompt.optimized_prompt,
+            model: prompt.model
+          }))
+          
+          // 关闭对话框
+          setIsHistoryDialogOpen(false)
+          
+          // 提示用户
+          toast({
+            title: "已加载",
+            description: "正在跳转到编辑器..."
+          })
+
+          // 跳转到优化页面
+          router.push('/optimize')
+        }}
       />
     </main>
   )
