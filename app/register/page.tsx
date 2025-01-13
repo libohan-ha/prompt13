@@ -37,16 +37,32 @@ export default function RegisterPage() {
         body: JSON.stringify({ email, password })
       })
       
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError)
+        throw new Error('注册失败：服务器响应无效')
+      }
       
       if (!response.ok) {
         throw new Error(data.error || '注册失败')
       }
       
+      console.log('Registration successful:', data)
+      
       toast({
         title: "注册成功",
         description: "请登录"
       })
+      
+      // 清空表单
+      setEmail("")
+      setPassword("")
+      setConfirmPassword("")
+      
+      // 延迟一下再跳转，让用户看到成功提示
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
       // 跳转到登录页
       router.push('/login')
