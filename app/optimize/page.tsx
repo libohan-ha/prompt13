@@ -12,11 +12,11 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { GEMINI_API_KEY } from "@/lib/api"
-import { getLocalStorage } from '@/lib/utils'
+import { getClientId, getLocalStorage } from '@/lib/utils'
 import type { OptimizedPrompt, TestResult } from '@/types/prompt'
 import { ArrowRightIcon, CopyIcon, Loader2, Play, PlusCircle, Zap } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DonateDialog } from "../../components/donate-dialog"
 
 export default function OptimizePage() {
@@ -37,6 +37,8 @@ export default function OptimizePage() {
   const VISIBLE_VERSIONS = 3 // 一次显示3个版本
   const [startVersion, setStartVersion] = useState(1)
   const [isDonateDialogOpen, setIsDonateDialogOpen] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const hasSavedRef = useRef(false)
 
   // 计算总页数
   const totalPages = Math.ceil(promptHistory.length / VERSIONS_PER_PAGE)
@@ -83,8 +85,8 @@ export default function OptimizePage() {
             setEditedContent(parsed.content)
             setIsOptimizing(false)
           }
-      } catch (error) {
-        console.error('Error parsing saved prompt:', error)
+        } catch (error) {
+          console.error('Error parsing saved prompt:', error)
         }
       }
     }
@@ -104,6 +106,44 @@ export default function OptimizePage() {
 
   const startOptimize = async (originalPrompt: string) => {
     try {
+      setIsOptimizing(true)
+      let fullContent = ""
+      let contentBuffer = ""
+      let updateTimeout: NodeJS.Timeout | null = null
+      let buffer = ""
+      const decoder = new TextDecoder()
+      
+      // 重置保存状态
+      hasSavedRef.current = false
+
+      // 添加cleanContent函数
+      const cleanContent = (content: string) => {
+        content = content.replace(/\n{3,}/g, '\n\n')
+        
+        const sections = new Map()
+        const processedLines = new Set()
+        const lines = content.split('\n')
+        const cleanedLines = lines.filter(line => {
+          if (!line.trim()) return true
+          
+          if (line.startsWith('# Role:') || 
+              line.startsWith('## Profile') ||
+              line.startsWith('## Skills') ||
+              line.startsWith('## Rules') ||
+              line.startsWith('## Workflows')) {
+            if (sections.has(line)) return false
+            sections.set(line, true)
+            return true
+          }
+          
+          if (processedLines.has(line)) return false
+          processedLines.add(line)
+          return true
+        })
+
+        return cleanedLines.join('\n')
+      }
+
       const saved = getLocalStorage('optimizedPrompt')
       const selectedModel = saved ? JSON.parse(saved).model : "deepseek-v3"
       
@@ -201,116 +241,39 @@ export default function OptimizePage() {
           })
         })
       } else if (selectedModel === "gemini-1206" || selectedModel === "gemini-2.0-flash-exp") {
-        // 处理 Gemini 模型
         const modelName = selectedModel === "gemini-1206" ? "gemini-exp-1206" : "gemini-2.0-flash-exp"
         
-        response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              contents: [{
+        response = await fetch("/api/gemini", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: "system",
+                content: `你是一个专业的AI提示词优化专家...`
+              },
+              {
                 role: "user",
-                parts: [{ text: `Instructions: 你是一个专业的AI提示词优化专家。请帮我优化以下prompt，并按照以下格式返回：
-
-# Role: [角色名称]
-
-## Profile
-- language: [语言]
-- description: [详细的角色描述]
-- background: [角色背景]
-- personality: [性格特征]
-- expertise: [专业领域]
-- target_audience: [目标用户群]
-
-## Skills
-
-1. [核心技能类别 1]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-
-2. [核心技能类别 2]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-
-3. [辅助技能类别]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-   - [具体技能]: [简要说明]
-
-## Rules
-
-1. [基本原则]：
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-
-2. [行为准则]：
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-   - [具体规则]: [详细说明]
-
-3. [限制条件]：
-   - [具体限制]: [详细说明]
-   - [具体限制]: [详细说明]
-   - [具体限制]: [详细说明]
-   - [具体限制]: [详细说明]
-
-## Workflows
-
-1. [主要工作流程 1]
-   - 目标: [明确目标]
-   - 步骤 1: [详细说明]
-   - 步骤 2: [详细说明]
-   - 步骤 3: [详细说明]
-   - 预期结果: [说明]
-
-2. [主要工作流程 2]
-   - 目标: [明确目标]
-   - 步骤 1: [详细说明]
-   - 步骤 2: [详细说明]
-   - 步骤 3: [详细说明]
-   - 预期结果: [说明]
-
-请基于以上模板，优化并扩展以下prompt，确保内容专业、完整且结构清晰：
-
-Input: ${originalPrompt}` }]
-              }],
-              generationConfig: selectedModel === "gemini-2.0-flash-exp" ? {
-                temperature: 0.9,
-                maxOutputTokens: 2048,
-              } : {
-                temperature: 1,
-                topK: 64,
-                topP: 0.95,
-                maxOutputTokens: 8192,
+                content: originalPrompt
               }
-            })
-          }
-        )
+            ],
+            model: modelName
+          })
+        })
 
         if (!response.ok) {
           const error = await response.json()
           throw new Error(error.error || '优化请求失败')
         }
 
-        // 特别处理Gemini的响应
         const result = await response.json()
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
           const content = result.candidates[0].content.parts[0].text
           setStreamContent(content)
           
-          // 更新历史记录
+          // 更新本地状态
           const optimizedPrompt = {
             content: content,
             originalPrompt: originalPrompt,
@@ -602,63 +565,13 @@ Input: ${originalPrompt}` }]
       }
 
       const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-      let fullContent = ""
-      let updateTimeout: NodeJS.Timeout | null = null
-      let contentBuffer = ""
-      let lastUpdateTime = Date.now()
-
-      const cleanContent = (content: string) => {
-        content = content.replace(/\n{3,}/g, '\n\n')
-        
-        const sections = new Map()
-        const processedLines = new Set()
-        const lines = content.split('\n')
-        const cleanedLines = lines.filter(line => {
-          if (!line.trim()) return true
-          
-          if (line.startsWith('# Role:') || 
-              line.startsWith('## Profile') ||
-              line.startsWith('## Skills') ||
-              line.startsWith('## Rules') ||
-              line.startsWith('## Workflows')) {
-            if (sections.has(line)) return false
-            sections.set(line, true)
-            return true
-          }
-          
-          if (processedLines.has(line)) return false
-          processedLines.add(line)
-          return true
-        })
-
-        return cleanedLines.join('\n')
-      }
-
-      const updateContent = (content: string, force = false) => {
-        if (!force) {
-          const [should, newTime] = shouldUpdate(lastUpdateTime)
-          if (!should) return
-          lastUpdateTime = newTime
-        }
-
-        if (updateTimeout) {
-          clearTimeout(updateTimeout)
-        }
-
-        updateTimeout = setTimeout(() => {
-          const cleanedContent = cleanContent(content)
-          setStreamContent(cleanedContent)
-        }, 200)
-      }
-
+      
       while (reader) {
         const { done, value } = await reader.read()
         if (done) {
           if (contentBuffer) {
             fullContent += contentBuffer
-            updateContent(fullContent, true)
+            setStreamContent(fullContent)
           }
           break
         }
@@ -690,29 +603,8 @@ Input: ${originalPrompt}` }]
                   contentBuffer = ""
                 }
               }
-            } catch (error) {
-              console.error('Error in stream processing:', error)
-              if (fullContent) {
-                const finalContent = cleanContent(fullContent)
-                setStreamContent(finalContent)
-                
-                const optimizedPrompt = {
-                  content: finalContent,
-                  originalPrompt: originalPrompt,
-                  version: 1
-                }
-                
-                setPromptHistory([optimizedPrompt])
-                localStorage.setItem('optimizedPrompt', JSON.stringify(optimizedPrompt))
-                await saveToDatabase(originalPrompt, finalContent, model)
-              }
-              
-              toast({
-                title: "提示",
-                description: "内容生成被中断，已保存部分生成结果",
-              })
-              
-              break
+            } catch (e) {
+              console.error('Error parsing SSE message:', e)
             }
           }
         }
@@ -725,16 +617,20 @@ Input: ${originalPrompt}` }]
       const finalContent = cleanContent(fullContent)
       setStreamContent(finalContent)
 
-      const optimizedPrompt = {
-        content: finalContent,
-        originalPrompt: originalPrompt,
-        version: 1
+      if (finalContent && !hasSavedRef.current) { // 使用ref检查是否已保存
+        const optimizedPrompt = {
+          content: finalContent,
+          originalPrompt: originalPrompt,
+          model: selectedModel,
+          version: 1
+        }
+
+        setPromptHistory([optimizedPrompt])
+        localStorage.setItem('optimizedPrompt', JSON.stringify(optimizedPrompt))
+        
+        await saveToDatabase(originalPrompt, finalContent, selectedModel)
+        hasSavedRef.current = true // 标记为已保存
       }
-
-      setPromptHistory([optimizedPrompt])
-      localStorage.setItem('optimizedPrompt', JSON.stringify(optimizedPrompt))
-
-      await saveToDatabase(originalPrompt, finalContent, model)
 
     } catch (error) {
       console.error(error)
@@ -1440,30 +1336,94 @@ Input: ${testInput}`
   }
 
   const saveToDatabase = async (originalPrompt: string, optimizedPrompt: string, model: string) => {
+    if (isSaving || hasSavedRef.current) return // 检查是否已保存
+    
     try {
+      setIsSaving(true)
+      const clientId = getClientId()
+      
       const response = await fetch('/api/prompts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-client-id': clientId || ''
         },
         body: JSON.stringify({
           original_prompt: originalPrompt,
           optimized_prompt: optimizedPrompt,
-          model
+          model,
+          client_id: clientId
         })
       })
 
       if (!response.ok) {
-        throw new Error('Failed to save prompt')
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to save prompt')
       }
 
-      return await response.json()
+      const result = await response.json()
+      return result
     } catch (error) {
-      console.error('Error saving prompt:', error)
+      console.error('Error in saveToDatabase:', error)
       toast({
         variant: "destructive",
         title: "保存失败",
-        description: "无法保存到数据库"
+        description: error instanceof Error ? error.message : "无法保存到数据库"
+      })
+      throw error
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleCopyTestInput = async () => {
+    try {
+      if (!testInput.trim()) {
+        toast({
+          title: "复制失败",
+          description: "没有可复制的内容",
+          variant: "destructive"
+        })
+        return
+      }
+
+      await navigator.clipboard.writeText(testInput)
+      toast({
+        title: "复制成功",
+        description: "已复制到剪贴板"
+      })
+    } catch (error) {
+      console.error('Copy error:', error)
+      toast({
+        title: "复制失败",
+        description: "请手动复制",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleCopyTestOutput = async () => {
+    try {
+      if (!testResult?.output?.trim()) {
+        toast({
+          title: "复制失败",
+          description: "没有可复制的内容",
+          variant: "destructive"
+        })
+        return
+      }
+
+      await navigator.clipboard.writeText(testResult.output)
+      toast({
+        title: "复制成功",
+        description: "已复制到剪贴板"
+      })
+    } catch (error) {
+      console.error('Copy error:', error)
+      toast({
+        title: "复制失败",
+        description: "请手动复制",
+        variant: "destructive"
       })
     }
   }
@@ -1563,12 +1523,22 @@ Input: ${testInput}`
               {/* Content to Process */}
               <div className="flex flex-col h-full">
                 <div className="flex-1 bg-green-50 rounded-2xl sm:rounded-3xl p-6 sm:p-8 space-y-4 shadow-lg border border-green-100">
-                  <div className="flex flex-col gap-2">
-                    <h2 className="text-xl sm:text-2xl font-semibold text-green-800">待处理内容</h2>
-                    <p className="text-sm text-green-600">
-                      在这里输入需要处理的实际内容（如：需要翻译的文章、需要检查的代码等），
-                      点击下方"测试"按钮验证优化后的prompt效果。
-                    </p>
+                  <div className="flex justify-between items-start">
+                    <div className="flex flex-col gap-2">
+                      <h2 className="text-xl sm:text-2xl font-semibold text-green-800">待处理内容</h2>
+                      <p className="text-sm text-green-600">
+                        在这里输入需要处理的实际内容（如：需要翻译的文章、需要检查的代码等），
+                        点击下方"测试"按钮验证优化后的prompt效果。
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyTestInput}
+                      className="h-9 w-9 text-green-600 hover:text-green-700 hover:bg-green-100"
+                    >
+                      <CopyIcon className="h-4 w-4" />
+                    </Button>
                   </div>
                   <Textarea 
                     className="h-[450px] resize-none bg-white border-2 border-green-100 rounded-xl sm:rounded-2xl focus:ring-2 focus:ring-green-400 focus:border-transparent text-base sm:text-lg p-4"
@@ -1620,7 +1590,17 @@ Input: ${testInput}`
               {/* Output Preview */}
               <div className="flex flex-col h-full">
                 <div className="flex-1 bg-purple-50 rounded-2xl sm:rounded-3xl p-6 sm:p-8 space-y-4 shadow-lg border border-purple-100">
-                  <h2 className="text-xl sm:text-2xl font-semibold text-purple-800 mb-4 sm:mb-6">输出预览</h2>
+                  <div className="flex justify-between items-center mb-4 sm:mb-6">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-purple-800">输出预览</h2>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyTestOutput}
+                      className="h-9 w-9 text-purple-600 hover:text-purple-700 hover:bg-purple-100"
+                    >
+                      <CopyIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <Textarea 
                     className="h-[450px] resize-none bg-white border-2 border-purple-100 rounded-xl sm:rounded-2xl focus:ring-2 focus:ring-purple-400 focus:border-transparent text-base sm:text-lg p-4"
                     value={testResult?.output ?? ''}

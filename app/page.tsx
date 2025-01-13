@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import * as React from 'react'
+import { useState } from "react"
 
 // UI Components
 import { DonateDialog } from "@/components/donate-dialog"
@@ -15,9 +16,10 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
+import { HistoryDialog } from "@/components/history-dialog"
 
 // Icons
-import { Zap } from 'lucide-react'
+import { Zap, History } from 'lucide-react'
 
 // Utils
 import { setLocalStorage } from "@/lib/utils"
@@ -30,6 +32,7 @@ export default function Home() {
   const [prompt, setPrompt] = React.useState<string>("")
   const [model, setModel] = React.useState<ModelType>("deepseek-v3")
   const [isDonateDialogOpen, setIsDonateDialogOpen] = React.useState(false)
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
 
   const handleModelChange = (value: string) => {
     setModel(value as ModelType)
@@ -73,6 +76,14 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button
                   variant="outline"
+                  className="h-12 sm:h-16 px-6 sm:px-8 text-base sm:text-lg rounded-xl sm:rounded-2xl bg-white hover:bg-blue-50 text-blue-600 border-blue-200 hover:border-blue-400 flex items-center justify-center space-x-3 transition-all duration-300 ease-in-out transform hover:scale-105"
+                  onClick={() => setIsHistoryDialogOpen(true)}
+                >
+                  <History className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
+                  <span>记录</span>
+                </Button>
+                <Button
+                  variant="outline"
                   className="h-12 sm:h-16 px-6 sm:px-8 text-base sm:text-lg rounded-xl sm:rounded-2xl bg-white hover:bg-purple-50 text-purple-600 border-purple-200 hover:border-purple-400 flex items-center justify-center space-x-3 transition-all duration-300 ease-in-out transform hover:scale-105"
                   onClick={() => setIsDonateDialogOpen(true)}
                 >
@@ -108,6 +119,10 @@ export default function Home() {
       <DonateDialog 
         open={isDonateDialogOpen} 
         onOpenChange={setIsDonateDialogOpen}
+      />
+      <HistoryDialog 
+        open={isHistoryDialogOpen} 
+        onOpenChange={setIsHistoryDialogOpen}
       />
     </main>
   )

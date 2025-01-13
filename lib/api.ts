@@ -1,4 +1,4 @@
-export const GEMINI_API_KEY = 'AIzaSyAfjO3q_JrrAZ_hCTbjGut4SM_pTohPgjg'
+export const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY
 
 export async function callDeepseek(systemPrompt: string, userPrompt: string) {
   const apiKey = "sk-7e369c68994443ab8c169d8d3612ee8e"

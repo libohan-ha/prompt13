@@ -54,4 +54,21 @@ export const isLocalStorageAvailable = (): boolean => {
   } catch (e) {
     return false
   }
+}
+
+// 生成随机ID
+function generateClientId() {
+  return 'client_' + Math.random().toString(36).substring(2) + Date.now().toString(36)
+}
+
+// 获取或创建客户端ID
+export function getClientId() {
+  if (typeof window === 'undefined') return null
+  
+  let clientId = localStorage.getItem('clientId')
+  if (!clientId) {
+    clientId = generateClientId()
+    localStorage.setItem('clientId', clientId)
+  }
+  return clientId
 } 
