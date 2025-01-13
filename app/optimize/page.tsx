@@ -243,25 +243,105 @@ export default function OptimizePage() {
       } else if (selectedModel === "gemini-1206" || selectedModel === "gemini-2.0-flash-exp") {
         const modelName = selectedModel === "gemini-1206" ? "gemini-exp-1206" : "gemini-2.0-flash-exp"
         
-        response = await fetch("/api/gemini", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: "system",
-                content: `你是一个专业的AI提示词优化专家...`
-              },
-              {
-                role: "user",
-                content: originalPrompt
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ 
+                    text: `你是一个专业的AI提示词优化专家。请帮我优化以下prompt，并按照以下格式返回：
+
+# Role: [角色名称]
+
+## Profile
+- language: [语言]
+- description: [详细的角色描述]
+- background: [角色背景]
+- personality: [性格特征]
+- expertise: [专业领域]
+- target_audience: [目标用户群]
+
+## Skills
+
+1. [核心技能类别 1]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+
+2. [核心技能类别 2]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+
+3. [辅助技能类别]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+   - [具体技能]: [简要说明]
+
+## Rules
+
+1. [基本原则]：
+   - [具体规则]: [详细说明]
+   - [具体规则]: [详细说明]
+   - [具体规则]: [详细说明]
+   - [具体规则]: [详细说明]
+
+2. [行为准则]：
+   - [具体规则]: [详细说明]
+   - [具体规则]: [详细说明]
+   - [具体规则]: [详细说明]
+   - [具体规则]: [详细说明]
+
+3. [限制条件]：
+   - [具体限制]: [详细说明]
+   - [具体限制]: [详细说明]
+   - [具体限制]: [详细说明]
+   - [具体限制]: [详细说明]
+
+## Workflows
+
+1. [主要工作流程 1]
+   - 目标: [明确目标]
+   - 步骤 1: [详细说明]
+   - 步骤 2: [详细说明]
+   - 步骤 3: [详细说明]
+   - 预期结果: [说明]
+
+2. [主要工作流程 2]
+   - 目标: [明确目标]
+   - 步骤 1: [详细说明]
+   - 步骤 2: [详细说明]
+   - 步骤 3: [详细说明]
+   - 预期结果: [说明]
+
+请基于以上模板，优化并扩展以下prompt，确保内容专业、完整且结构清晰：
+
+${originalPrompt}`
+                  }]
+                }
+              ],
+              generationConfig: selectedModel === "gemini-2.0-flash-exp" ? {
+                temperature: 0.9,
+                maxOutputTokens: 2048,
+              } : {
+                temperature: 1,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 8192,
+                responseMimeType: "text/plain"
               }
-            ],
-            model: modelName
-          })
-        })
+            })
+          }
+        )
 
         if (!response.ok) {
           const error = await response.json()
@@ -746,9 +826,10 @@ Input: ${testInput}`
                 maxOutputTokens: 2048,
               } : {
                 temperature: 1,
-                topK: 64,
+                topK: 40,
                 topP: 0.95,
                 maxOutputTokens: 8192,
+                responseMimeType: "text/plain"
               }
             })
           }
@@ -1121,18 +1202,22 @@ Input: ${testInput}`
             body: JSON.stringify({
               contents: [{
                 role: "user",
-                parts: [{ text: `Instructions: ${editedContent}\n\n请根据以下反馈优化prompt：${feedback}` }]
+                parts: [{ 
+                  text: `Instructions: ${editedContent}
+
+Input: ${feedback}`
+                }]
               }],
               generationConfig: selectedModel === "gemini-2.0-flash-exp" ? {
                 temperature: 0.9,
                 maxOutputTokens: 2048,
               } : {
                 temperature: 1,
-                topK: 64,
+                topK: 40,
                 topP: 0.95,
                 maxOutputTokens: 8192,
-              },
-              stream: true
+                responseMimeType: "text/plain"
+              }
             })
           }
         )
