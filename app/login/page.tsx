@@ -39,15 +39,17 @@ export default function LoginPage() {
         throw new Error(data.error || '登录失败')
       }
       
+      console.log('Login successful:', data)
+      
       toast({
         title: "登录成功",
         description: "正在跳转..."
       })
       
-      // 添加一个短暂的延迟，确保cookie已经设置
+      // 延迟跳转以确保 cookie 已设置
       await new Promise(resolve => setTimeout(resolve, 1000))
       
-      // 使用window.location进行强制跳转到主页
+      // 使用 window.location.href 进行强制跳转
       window.location.href = '/'
       
     } catch (error) {

@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
             role: "user",
             parts: [{ text: prompt }]
           }],
-          generationConfig: model === "gemini-2.0-flash-exp" ? {
+          generationConfig: model === "gemini-2.0-flash-exp" || model === "gemini-exp-1206" ? {
             temperature: 0.9,
             maxOutputTokens: 2048,
           } : {

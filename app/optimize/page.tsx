@@ -3,11 +3,11 @@
 import { IterateDialog } from "@/components/iterate-dialog"
 import { Button } from "@/components/ui/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
@@ -255,7 +255,7 @@ export default function OptimizePage() {
                 content: originalPrompt
               }
             ],
-            model: selectedModel
+            model: selectedModel === "gemini-1206" ? "gemini-exp-1206" : selectedModel
           })
         })
 

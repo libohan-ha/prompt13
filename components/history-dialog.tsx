@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 import { getClientId } from "@/lib/utils"
 import { Loader2, Search, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -43,9 +44,23 @@ export function HistoryDialog({
       setLoading(true)
       console.log('Loading prompts...')
       
+      // Get the current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        throw new Error('Failed to get user session')
+      }
+      
+      if (!session?.user?.id) {
+        console.error('No user ID found in session')
+        throw new Error('User not authenticated')
+      }
+      
       const response = await fetch('/api/prompts', {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-user-id': session.user.id
         }
       })
       

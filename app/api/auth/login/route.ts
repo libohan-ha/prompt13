@@ -1,94 +1,101 @@
-import { supabase } from '@/lib/supabase'
-import bcrypt from 'bcryptjs'
-import { SignJWT } from 'jose'
+import { createClient } from '@/lib/supabase'
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+export async function POST(request: NextRequest) {
+  console.log('Login API called')
+  const cookieStore = cookies()
+  const supabase = createClient(cookieStore)
 
-export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json()
+    // 解析请求数据
+    let email, password
+    try {
+      const body = await request.json()
+      email = body.email
+      password = body.password
+    } catch (parseError) {
+      console.error('Request parsing error:', parseError)
+      return new NextResponse(
+        JSON.stringify({ error: '无效的请求数据' }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     console.log('Login attempt for email:', email)
     
     if (!email || !password) {
       console.log('Missing email or password')
-      return NextResponse.json(
-        { error: '邮箱和密码不能为空' },
-        { status: 400 }
+      return new NextResponse(
+        JSON.stringify({ error: '邮箱和密码不能为空' }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
       )
     }
 
-    // 查找用户
-    const { data: user, error: findError } = await supabase
-      .from('users')
-      .select()
-      .eq('email', email)
-      .single()
+    // 使用 Supabase Auth 进行登录
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
 
-    if (findError || !user) {
-      console.log('User not found:', findError)
-      return NextResponse.json(
-        { error: '用户不存在' },
-        { status: 401 }
+    if (error) {
+      console.error('Login error:', error)
+      return new NextResponse(
+        JSON.stringify({ 
+          error: error.message === 'Invalid login credentials'
+            ? '邮箱或密码错误'
+            : '登录失败：' + error.message
+        }),
+        { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        }
       )
     }
 
-    // 验证密码
-    const isValidPassword = await bcrypt.compare(password, user.password)
-    if (!isValidPassword) {
-      console.log('Invalid password')
-      return NextResponse.json(
-        { error: '密码错误' },
-        { status: 401 }
+    if (!data?.user || !data?.session) {
+      console.error('No user data returned')
+      return new NextResponse(
+        JSON.stringify({ error: '登录失败：未返回用户数据' }),
+        { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
       )
     }
 
-    console.log('Login successful for user:', user.id)
+    console.log('Login successful for user:', data.user.id)
 
-    try {
-      // 生成JWT token
-      const secret = new TextEncoder().encode(JWT_SECRET)
-      const token = await new SignJWT({ userId: user.id, email: user.email })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setExpirationTime('7d')
-        .sign(secret)
-
-      console.log('JWT token generated successfully')
-
-      // 创建响应
-      const response = NextResponse.json({
+    return new NextResponse(
+      JSON.stringify({ 
         message: '登录成功',
         user: {
-          id: user.id,
-          email: user.email
+          id: data.user.id,
+          email: data.user.email
         }
-      })
+      }),
+      { 
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    )
 
-      // 设置cookie
-      response.cookies.set({
-        name: 'token',
-        value: token,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 // 7 days
-      })
-
-      console.log('Cookie set successfully')
-      return response
-
-    } catch (tokenError) {
-      console.error('Error generating token:', tokenError)
-      return NextResponse.json(
-        { error: '登录失败：无法生成令牌' },
-        { status: 500 }
-      )
-    }
   } catch (error) {
-    console.error('Login error:', error)
-    return NextResponse.json(
-      { error: '登录失败：服务器错误' },
-      { status: 500 }
+    console.error('Unexpected error:', error)
+    return new NextResponse(
+      JSON.stringify({ 
+        error: '登录失败：' + (error instanceof Error ? error.message : '服务器错误')
+      }),
+      { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
     )
   }
 } 
