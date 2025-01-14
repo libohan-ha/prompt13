@@ -43,22 +43,30 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // 获取当前会话
-  const { data: { session }, error } = await supabase.auth.getSession()
+  // 获取当前用户
+  const { data: { user }, error } = await supabase.auth.getUser()
 
   if (error) {
-    console.error('Session verification error:', error)
+    console.error('User authentication error:', error)
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (!session) {
-    console.log('No session found, redirecting to login')
+  if (!user) {
+    console.log('No authenticated user found, redirecting to login')
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // 确保用户ID是有效的UUID
+  const userId = user.id
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(userId)) {
+    console.error('Invalid user ID format:', userId)
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
   // 将用户ID添加到请求头中
   const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('x-user-id', session.user.id)
+  requestHeaders.set('x-user-id', userId)
 
   // 继续请求，但包含新的请求头
   response = NextResponse.next({

@@ -137,31 +137,102 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id')
     const userId = req.headers.get('x-user-id')
 
+    console.log('DELETE /api/prompts - Request:', {
+      id,
+      userId,
+      url: req.url,
+      headers: Object.fromEntries(req.headers.entries())
+    })
+
     if (!id || !userId) {
+      console.error('DELETE /api/prompts - Missing parameters:', {
+        hasId: !!id,
+        hasUserId: !!userId
+      })
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
       )
     }
 
-    // 删除记录
-    const { error } = await supabase
+    // 验证 UUID 格式
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(userId)) {
+      console.error('DELETE /api/prompts - Invalid user ID format:', userId)
+      return NextResponse.json(
+        { error: 'Invalid user ID format' },
+        { status: 400 }
+      )
+    }
+
+    // 先检查记录是否存在
+    const { data: existingData, error: findError } = await supabase
+      .from('prompts')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single()
+
+    console.log('DELETE /api/prompts - Find result:', {
+      exists: !!existingData,
+      error: findError?.message,
+      data: existingData
+    })
+
+    if (findError && findError.code !== 'PGRST116') {
+      console.error('DELETE /api/prompts - Error finding record:', findError)
+      return NextResponse.json(
+        { error: `Failed to find record: ${findError.message}` },
+        { status: 500 }
+      )
+    }
+
+    if (!existingData) {
+      console.error('DELETE /api/prompts - Record not found:', {
+        id,
+        userId
+      })
+      return NextResponse.json(
+        { error: 'Record not found or not authorized to delete' },
+        { status: 404 }
+      )
+    }
+
+    // 执行删除操作
+    const { error: deleteError } = await supabase
       .from('prompts')
       .delete()
       .eq('id', id)
       .eq('user_id', userId)
 
-    if (error) {
-      console.error('Error deleting record:', error)
+    if (deleteError) {
+      console.error('DELETE /api/prompts - Error deleting record:', {
+        error: deleteError,
+        code: deleteError.code,
+        message: deleteError.message,
+        id,
+        userId
+      })
       return NextResponse.json(
-        { error: 'Failed to delete record' },
+        { error: `Failed to delete record: ${deleteError.message}` },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ message: 'Record deleted successfully' })
+    console.log('DELETE /api/prompts - Record deleted successfully:', {
+      id,
+      userId,
+      record: existingData
+    })
+    
+    return NextResponse.json({ 
+      message: 'Record deleted successfully',
+      id,
+      userId,
+      deletedRecord: existingData
+    })
   } catch (error) {
-    console.error('API Error:', error)
+    console.error('DELETE /api/prompts - Unexpected error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

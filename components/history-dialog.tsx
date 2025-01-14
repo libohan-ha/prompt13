@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "@/components/ui/use-toast"
 import { supabase } from "@/lib/supabase"
-import { getClientId } from "@/lib/utils"
 import { Loader2, Search, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
@@ -44,23 +43,23 @@ export function HistoryDialog({
       setLoading(true)
       console.log('Loading prompts...')
       
-      // Get the current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      // Get the authenticated user
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
       
-      if (sessionError) {
-        console.error('Session error:', sessionError)
-        throw new Error('Failed to get user session')
+      if (userError) {
+        console.error('User authentication error:', userError)
+        throw new Error('Failed to authenticate user')
       }
       
-      if (!session?.user?.id) {
-        console.error('No user ID found in session')
+      if (!user?.id) {
+        console.error('No authenticated user found')
         throw new Error('User not authenticated')
       }
       
       const response = await fetch('/api/prompts', {
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': session.user.id
+          'x-user-id': user.id
         }
       })
       
@@ -95,15 +94,32 @@ export function HistoryDialog({
   const handleDelete = async (id: string) => {
     try {
       setDeleting(id)
+      
+      // Get the authenticated user
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError) {
+        console.error('User authentication error:', userError)
+        throw new Error('Failed to authenticate user')
+      }
+      
+      if (!user?.id) {
+        console.error('No authenticated user found')
+        throw new Error('User not authenticated')
+      }
+      
       const response = await fetch(`/api/prompts?id=${id}`, {
         method: 'DELETE',
         headers: {
-          'x-client-id': getClientId() || ''
+          'Content-Type': 'application/json',
+          'x-user-id': user.id
         }
       })
       
       if (!response.ok) {
-        throw new Error('Failed to delete prompt')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Delete Error:', errorData)
+        throw new Error(errorData.error || 'Failed to delete prompt')
       }
       
       await loadPrompts()
