@@ -3,9 +3,10 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import { NextRequest, NextResponse } from 'next/server'
 import fetch from 'node-fetch'
 
-// 代理配置
+// 代理配置 - 根据环境变量决定是否使用代理
+const USE_PROXY = process.env.USE_PROXY === 'true'
 const PROXY_URL = process.env.HTTPS_PROXY || 'http://127.0.0.1:7890'
-const proxyAgent = new HttpsProxyAgent(PROXY_URL)
+const proxyAgent = USE_PROXY ? new HttpsProxyAgent(PROXY_URL) : undefined
 
 const PROMPT_TEMPLATE = `你是一个专业的AI提示词优化专家。请帮我优化以下prompt，并按照以下格式返回：
 
@@ -103,8 +104,7 @@ export async function POST(request: NextRequest) {
       model,
       userId,
       messageCount: messages?.length,
-      apiKey: GEMINI_API_KEY ? '已配置' : '未配置',
-      proxy: PROXY_URL
+      apiKey: GEMINI_API_KEY ? '已配置' : '未配置'
     })
 
     if (!messages || !model) {
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     // Prepare the message with template
     const prompt = `${PROMPT_TEMPLATE}\n\n${originalPrompt}`
 
-    // Call Gemini API with proxy
+    // Call Gemini API with optional proxy
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
             responseMimeType: "text/plain"
           }
         }),
-        agent: proxyAgent
+        ...(USE_PROXY ? { agent: proxyAgent } : {})
       }
     )
 
