@@ -66,12 +66,30 @@ export function HistoryDialog({
       console.log('API Response status:', response.status)
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('API Error:', errorData)
-        throw new Error(
-          errorData.error || 
-          'Failed to fetch prompts'
-        )
+        // 首先尝试获取响应文本
+        const responseText = await response.text()
+        
+        // 尝试将文本解析为 JSON
+        let errorMessage = 'Failed to fetch prompts'
+        try {
+          const errorData = JSON.parse(responseText)
+          errorMessage = errorData.error || errorMessage
+        } catch (parseError) {
+          // 如果解析失败，检查是否为 HTML 响应
+          if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+            errorMessage = `Server error (${response.status}): The server returned an HTML error page`
+          } else {
+            errorMessage = `Server error (${response.status}): ${responseText.slice(0, 100)}`
+          }
+        }
+        
+        console.error('API Error:', {
+          status: response.status,
+          message: errorMessage,
+          responseText: responseText.slice(0, 200) // 只记录前 200 个字符
+        })
+        
+        throw new Error(errorMessage)
       }
       
       const data = await response.json()

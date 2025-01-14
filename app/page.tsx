@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 
 // Icons
-import { History, Zap } from 'lucide-react'
+import { History, LogOut, Zap } from 'lucide-react'
 
 // Utils
 import { setLocalStorage } from "@/lib/utils"
@@ -60,13 +60,44 @@ export default function Home() {
     router.push('/optimize')
   }, [prompt, model, router])
 
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST'
+      })
+      
+      if (!response.ok) {
+        throw new Error('登出失败')
+      }
+      
+      router.push('/login')
+    } catch (error) {
+      console.error('Logout error:', error)
+      toast({
+        variant: "destructive",
+        title: "登出失败",
+        description: error instanceof Error ? error.message : "未知错误"
+      })
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 p-4 sm:p-6 lg:p-8">
       <div className="max-w-4xl mx-auto bg-white/90 rounded-2xl sm:rounded-[40px] shadow-2xl overflow-hidden backdrop-blur-lg">
         <div className="p-6 sm:p-8 lg:p-12 space-y-6 sm:space-y-8">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-            Prompt Optimizer
-          </h1>
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+              Prompt Optimizer
+            </h1>
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              className="text-red-600 border-red-200 hover:bg-red-50"
+            >
+              <LogOut className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
+              退出登录
+            </Button>
+          </div>
           
           <div className="space-y-4">
             <Textarea
